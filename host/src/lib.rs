@@ -1,5 +1,5 @@
 use chess_core::{ChessMove, ChessMoveResult};
-use chess_methods::CHESS_ELF;
+use chess_methods::{CHESS_ELF, CHESS_ID};
 use risc0_zkvm::{default_prover, ExecutorEnv, Receipt};
 
 pub fn play_chess(chess_move: &ChessMove) -> (Receipt, ChessMoveResult) {
@@ -65,6 +65,7 @@ mod tests {
         let player_sig: Signature = whites_sigkey.sign(&player_sig_parts);
 
         let chess_move = ChessMove {
+            image_id: CHESS_ID.clone(),
             match_id: match_id_digest.try_into().unwrap(),
             nonce: nonce.to_le_bytes().try_into().unwrap(),
             whites_pubkey: whites_pubkey_bytes.to_vec(),

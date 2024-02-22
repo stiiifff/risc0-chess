@@ -10,7 +10,7 @@ use core::str::FromStr;
 use cozy_chess::{Board, Color, GameStatus, Move};
 use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 use risc0_zkvm::{
-    guest::env,
+    guest::env, serde,
     sha::{Digest, Impl, Sha256},
 };
 
@@ -67,6 +67,16 @@ pub fn main() {
     // as one of the two players playing the game, and whose turn it is to play based
     // on the current board state.
 
+    // Check if this is the first move
+    if board != Board::default() {
+        // Verify previous move (proof composition)
+        let prev_move = ChessMoveResult {
+            board_state: inputs.board_state.clone(),
+            match_state: game_status(&board)
+        };
+        env::verify(inputs.image_id, &serde::to_vec(&prev_move).unwrap()).unwrap();
+    }
+
     // Play the requested move. This could panick if it's an invalid move based on current board state.
     let mv: Move = Move::from_str(&inputs.player_move).expect("Invalid move encoding");
     board.play(mv);
@@ -75,15 +85,19 @@ pub fn main() {
 
     let result = ChessMoveResult {
         board_state: board.to_string(),
-        match_state: match board.status() {
-            GameStatus::Ongoing => match board.side_to_move() {
-                Color::White => MatchState::OnGoing(NextMove::Whites),
-                Color::Black => MatchState::OnGoing(NextMove::Blacks),
-            },
-            GameStatus::Won => MatchState::Won,
-            GameStatus::Drawn => MatchState::Drawn,
-        },
+        match_state: game_status(&board)
     };
     env::log(&format!("Execution cycles: {}", env::cycle_count()));
     env::commit(&result);
+}
+
+fn game_status(board: &Board) -> MatchState {
+    match board.status() {
+        GameStatus::Ongoing => match board.side_to_move() {
+            Color::White => MatchState::OnGoing(NextMove::Whites),
+            Color::Black => MatchState::OnGoing(NextMove::Blacks),
+        },
+        GameStatus::Won => MatchState::Won,
+        GameStatus::Drawn => MatchState::Drawn,
+    }
 }
