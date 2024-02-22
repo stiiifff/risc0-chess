@@ -5,7 +5,7 @@ use chess_methods::{CHESS_ID, CHESS_ELF};
 use cozy_chess::Board;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
 use rand_core::OsRng;
-use risc0_zkvm::{serde::to_vec, MemoryImage, Program, Receipt, GUEST_MAX_MEM, PAGE_SIZE};
+use risc0_zkvm::{compute_image_id, serde::to_vec, Receipt};
 use sha2::{Digest as _, Sha256};
 use std::time::Duration;
 
@@ -53,23 +53,20 @@ fn main() {
 fn run_bonsai(input: ChessMove) -> Result<()> {
     let client = bonsai_sdk::Client::from_env(risc0_zkvm::VERSION)?;
 
-    // create the memoryImg, upload it and return the imageId
-    let img_id = {
-        let program = Program::load_elf(CHESS_ELF, GUEST_MAX_MEM as u32)?;
-        let image = MemoryImage::new(&program, PAGE_SIZE as u32)?;
-        let image_id = hex::encode(image.compute_id());
-        let image = bincode::serialize(&image).expect("Failed to serialize memory img");
-        client.upload_img(&image_id, image)?;
-        image_id
-    };
+    // Compute the image_id, then upload the ELF with the image_id as its key.
+    let image_id = hex::encode(compute_image_id(CHESS_ELF)?);
+    client.upload_img(&image_id, CHESS_ELF.to_vec())?;
 
     // Prepare input data and upload it.
     let input_data = to_vec(&input).unwrap();
     let input_data = bytemuck::cast_slice(&input_data).to_vec();
     let input_id = client.upload_input(input_data)?;
 
+    // Add a list of assumptions
+    let assumptions: Vec<String> = vec![];
+
     // Start a session running the prover
-    let session = client.create_session(img_id, input_id)?;
+    let session = client.create_session(image_id, input_id, assumptions)?;
     loop {
         let res = session.status(&client)?;
         if res.status == "RUNNING" {
