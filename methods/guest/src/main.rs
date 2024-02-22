@@ -84,6 +84,6 @@ pub fn main() {
             GameStatus::Drawn => MatchState::Drawn,
         },
     };
-    env::log(&format!("Execution cycles: {}", env::get_cycle_count()));
+    env::log(&format!("Execution cycles: {}", env::cycle_count()));
     env::commit(&result);
 }
