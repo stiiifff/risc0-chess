@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ChessMove {
+    pub image_id: [u32; 8],
     // Match ID is SHA256 of {whites pub key, blacks pub key, nonce}
     pub match_id: [u8; 32],
     pub nonce: [u8; 16],

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bonsai_sdk::alpha as bonsai_sdk;
-use chess_core::ChessMove;
+use chess_core::{ChessMove, ChessMoveResult};
 use chess_methods::{CHESS_ID, CHESS_ELF};
 use cozy_chess::Board;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
@@ -27,30 +27,55 @@ fn main() {
     let match_id_digest = Sha256::digest(&match_id_parts);
 
     let board_initial_state = Board::default().to_string();
-    let player_move = r"e2e4".to_string();
+    let whites_move = r"e2e4".to_string();
 
-    let player_sig_parts = [
+    let whites_sig_parts = [
         match_id_digest.as_slice(),
         board_initial_state.as_bytes(),
-        player_move.as_bytes(),
+        whites_move.as_bytes(),
     ]
     .concat();
-    let player_sig: Signature = whites_sigkey.sign(&player_sig_parts);
+    let whites_sig: Signature = whites_sigkey.sign(&whites_sig_parts);
 
-    let chess_move = ChessMove {
+    let whites_move_1 = ChessMove {
+        image_id: CHESS_ID.clone(),
         match_id: match_id_digest.try_into().unwrap(),
         nonce: nonce.to_le_bytes().try_into().unwrap(),
         whites_pubkey: whites_pubkey_bytes.to_vec(),
         blacks_pubkey: blacks_pubkey_bytes.to_vec(),
         board_state: board_initial_state,
-        player_move: player_move,
-        player_sig: player_sig.to_vec(),
+        player_move: whites_move.clone(),
+        player_sig: whites_sig.to_vec(),
     };
 
-    run_bonsai(chess_move).expect("zk program failed executing with Bonsai SDK");
+    let (receipt, move_result) = run_bonsai(whites_move_1, None).expect("zk program failed executing with Bonsai SDK");
+
+
+    let blacks_move = r"e7e5".to_string();
+
+    let blacks_sig_parts = [
+        match_id_digest.as_slice(),
+        move_result.board_state.clone().as_bytes(),
+        blacks_move.as_bytes(),
+    ]
+    .concat();
+    let blacks_sig: Signature = blacks_sigkey.sign(&blacks_sig_parts);
+
+    let blacks_move_1 = ChessMove {
+        image_id: CHESS_ID.clone(),
+        match_id: match_id_digest.try_into().unwrap(),
+        nonce: nonce.to_le_bytes().try_into().unwrap(),
+        whites_pubkey: whites_pubkey_bytes.to_vec(),
+        blacks_pubkey: blacks_pubkey_bytes.to_vec(),
+        board_state: move_result.board_state,
+        player_move: blacks_move,
+        player_sig: blacks_sig.to_vec(),
+    };
+
+    let _ = run_bonsai(blacks_move_1, Some(receipt)).expect("zk program failed executing with Bonsai SDK");
 }
 
-fn run_bonsai(input: ChessMove) -> Result<()> {
+fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt,ChessMoveResult)> {
     let client = bonsai_sdk::Client::from_env(risc0_zkvm::VERSION)?;
 
     // Compute the image_id, then upload the ELF with the image_id as its key.
@@ -63,10 +88,15 @@ fn run_bonsai(input: ChessMove) -> Result<()> {
     let input_id = client.upload_input(input_data)?;
 
     // Add a list of assumptions
-    let assumptions: Vec<String> = vec![];
+    let assumptions = if prev_rcpt.is_some() {
+        vec![client.upload_receipt(bincode::serialize(&prev_rcpt.unwrap())?)?]
+    } else {
+        vec![]
+    };
 
     // Start a session running the prover
     let session = client.create_session(image_id, input_id, assumptions)?;
+    let mut result: Option<(Receipt,ChessMoveResult)> = None;
     loop {
         let res = session.status(&client)?;
         if res.status == "RUNNING" {
@@ -89,6 +119,8 @@ fn run_bonsai(input: ChessMove) -> Result<()> {
             receipt
                 .verify(CHESS_ID)
                 .expect("Receipt verification failed");
+            
+            result = Some((receipt.clone(), receipt.journal.decode().unwrap()));
         } else {
             panic!(
                 "Workflow exited: {} - | err: {}",
@@ -101,9 +133,9 @@ fn run_bonsai(input: ChessMove) -> Result<()> {
     }
 
     // Optionally run stark2snark
-    run_stark2snark(session.uuid)?;
+    // run_stark2snark(session.uuid)?;
 
-    Ok(())
+    Ok(result.unwrap())
 }
 
 fn run_stark2snark(session_id: String) -> Result<()> {
