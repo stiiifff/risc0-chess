@@ -13,7 +13,7 @@ pub fn play_chess(chess_move: &ChessMove) -> (Receipt, ChessMoveResult) {
     let prover = default_prover();
 
     // Produce a receipt by proving the specified ELF binary.
-    let receipt = prover.prove_elf(env, CHESS_ELF).unwrap();
+    let receipt = prover.prove(env, CHESS_ELF).unwrap();
 
     // Extract journal of receipt (i.e. output result, where result = a * b)
     let result: ChessMoveResult = receipt.journal.decode().expect(
