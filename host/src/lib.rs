@@ -1,13 +1,17 @@
 use chess_core::{ChessMove, ChessMoveResult};
-use chess_methods::{CHESS_ELF, CHESS_ID};
+use chess_methods::CHESS_ELF;
 use risc0_zkvm::{default_prover, ExecutorEnv, Receipt};
 
-pub fn play_chess(chess_move: &ChessMove) -> (Receipt, ChessMoveResult) {
-    let env = ExecutorEnv::builder()
-        .write(chess_move)
-        .unwrap()
-        .build()
-        .unwrap();
+pub fn play_chess(
+    chess_move: &ChessMove,
+    prev_rcpt: Option<Receipt>,
+) -> (Receipt, ChessMoveResult) {
+    let mut env_builder = ExecutorEnv::builder();
+    if prev_rcpt.is_some() {
+        env_builder.add_assumption(prev_rcpt.unwrap());
+    }
+
+    let env = env_builder.write(chess_move).unwrap().build().unwrap();
 
     // Obtain the default prover.
     let prover = default_prover();
@@ -27,6 +31,7 @@ pub fn play_chess(chess_move: &ChessMove) -> (Receipt, ChessMoveResult) {
 mod tests {
     use super::*;
     use chess_core::{MatchState, NextMove};
+    use chess_methods::CHESS_ID;
     use cozy_chess::Board;
     use k256::ecdsa::{signature::Signer, Signature, SigningKey};
     use rand_core::OsRng;
@@ -54,38 +59,76 @@ mod tests {
         println!("Match ID: {}", hex::encode(match_id_digest));
 
         let board_initial_state = Board::default().to_string();
-        let player_move = r"e2e4".to_string();
 
-        let player_sig_parts = [
+        // Whites move 1
+        let whites_move = r"e2e4".to_string();
+
+        let whites_sig_parts = [
             match_id_digest.as_slice(),
             board_initial_state.as_bytes(),
-            player_move.as_bytes(),
+            whites_move.as_bytes(),
         ]
         .concat();
-        let player_sig: Signature = whites_sigkey.sign(&player_sig_parts);
+        let whites_sig: Signature = whites_sigkey.sign(&whites_sig_parts);
 
-        let chess_move = ChessMove {
+        let whites_move_1 = ChessMove {
             image_id: CHESS_ID.clone(),
             match_id: match_id_digest.try_into().unwrap(),
             nonce: nonce.to_le_bytes().try_into().unwrap(),
             whites_pubkey: whites_pubkey_bytes.to_vec(),
             blacks_pubkey: blacks_pubkey_bytes.to_vec(),
             board_state: board_initial_state,
-            player_move: player_move,
-            player_sig: player_sig.to_vec(),
+            player_move: whites_move.clone(),
+            player_sig: whites_sig.to_vec(),
         };
 
-        let (_, result) = play_chess(&chess_move);
+        let (receipt, move1_result) = play_chess(&whites_move_1, None);
 
         assert_eq!(
-            result.match_state,
+            move1_result.match_state,
             MatchState::OnGoing(NextMove::Blacks),
             "zkVM output should have the correct board match state."
         );
 
         assert_eq!(
-            result.board_state, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            move1_result.board_state, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
             "zkVM output should have the correct board state."
-        )
+        );
+
+        // Blacks move 1
+        let blacks_move = r"e7e5".to_string();
+
+        let blacks_sig_parts = [
+            match_id_digest.as_slice(),
+            move1_result.board_state.clone().as_bytes(),
+            blacks_move.as_bytes(),
+        ]
+        .concat();
+        let blacks_sig: Signature = blacks_sigkey.sign(&blacks_sig_parts);
+
+        let blacks_move_1 = ChessMove {
+            image_id: CHESS_ID.clone(),
+            match_id: match_id_digest.try_into().unwrap(),
+            nonce: nonce.to_le_bytes().try_into().unwrap(),
+            whites_pubkey: whites_pubkey_bytes.to_vec(),
+            blacks_pubkey: blacks_pubkey_bytes.to_vec(),
+            board_state: move1_result.board_state,
+            player_move: blacks_move,
+            player_sig: blacks_sig.to_vec(),
+        };
+
+        let (_, move2_result) = play_chess(&blacks_move_1, Some(receipt));
+
+        assert_eq!(
+            move2_result.match_state,
+            MatchState::OnGoing(NextMove::Whites),
+            "zkVM output should have the correct board match state."
+        );
+
+        // assert_eq!(
+        //     result.board_state, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        //     "zkVM output should have the correct board state."
+        // );
+
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bonsai_sdk::alpha as bonsai_sdk;
 use chess_core::{ChessMove, ChessMoveResult};
-use chess_methods::{CHESS_ID, CHESS_ELF};
+use chess_methods::{CHESS_ELF, CHESS_ID};
 use cozy_chess::Board;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
 use rand_core::OsRng;
@@ -48,8 +48,8 @@ fn main() {
         player_sig: whites_sig.to_vec(),
     };
 
-    let (receipt, move_result) = run_bonsai(whites_move_1, None).expect("zk program failed executing with Bonsai SDK");
-
+    let (receipt, move_result) =
+        run_bonsai(whites_move_1, None).expect("zk program failed executing with Bonsai SDK");
 
     let blacks_move = r"e7e5".to_string();
 
@@ -72,10 +72,11 @@ fn main() {
         player_sig: blacks_sig.to_vec(),
     };
 
-    let _ = run_bonsai(blacks_move_1, Some(receipt)).expect("zk program failed executing with Bonsai SDK");
+    let _ = run_bonsai(blacks_move_1, Some(receipt))
+        .expect("zk program failed executing with Bonsai SDK");
 }
 
-fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt,ChessMoveResult)> {
+fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt, ChessMoveResult)> {
     let client = bonsai_sdk::Client::from_env(risc0_zkvm::VERSION)?;
 
     // Compute the image_id, then upload the ELF with the image_id as its key.
@@ -96,7 +97,7 @@ fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt,C
 
     // Start a session running the prover
     let session = client.create_session(image_id, input_id, assumptions)?;
-    let mut result: Option<(Receipt,ChessMoveResult)> = None;
+    let mut result: Option<(Receipt, ChessMoveResult)> = None;
     loop {
         let res = session.status(&client)?;
         if res.status == "RUNNING" {
@@ -119,7 +120,7 @@ fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt,C
             receipt
                 .verify(CHESS_ID)
                 .expect("Receipt verification failed");
-            
+
             result = Some((receipt.clone(), receipt.journal.decode().unwrap()));
         } else {
             panic!(

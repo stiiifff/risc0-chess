@@ -47,7 +47,7 @@ fn main() {
 
     println!("Chess move: {:?}", &chess_move);
 
-    let (receipt, result) = play_chess(&chess_move);
+    let (receipt, result) = play_chess(&chess_move, None);
 
     // Verify receipt, panic if it's wrong
     receipt.verify(CHESS_ID).expect(
