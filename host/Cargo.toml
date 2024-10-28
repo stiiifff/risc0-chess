@@ -11,6 +11,7 @@ cozy-chess = { version = "0.3.3", default-features = false }
 hex = "0.4"
 k256 = { version = "=0.13.1", features = ["arithmetic", "serde", "expose-field", "std", "ecdsa"], default_features = false }
 rand_core = "0.6.4"
-risc0-zkvm = { version = "0.20.1" }
+risc0-zkvm = { version = "1.1.2" }
 serde = "1.0"
 sha2 = "0.10.6"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

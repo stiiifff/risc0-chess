@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bonsai_sdk::alpha as bonsai_sdk;
+use bonsai_sdk::blocking::Client;
 use chess_core::{ChessMove, ChessMoveResult};
 use chess_methods::{CHESS_ELF, CHESS_ID};
 use cozy_chess::Board;
@@ -77,7 +77,7 @@ fn main() {
 }
 
 fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt, ChessMoveResult)> {
-    let client = bonsai_sdk::Client::from_env(risc0_zkvm::VERSION)?;
+    let client = Client::from_env(risc0_zkvm::VERSION)?;
 
     // Compute the image_id, then upload the ELF with the image_id as its key.
     let image_id = hex::encode(compute_image_id(CHESS_ELF)?);
@@ -96,7 +96,9 @@ fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt, 
     };
 
     // Start a session running the prover
-    let session = client.create_session(image_id, input_id, assumptions)?;
+    // Wether to run in execute only mode
+    let execute_only = false;
+    let session = client.create_session(image_id, input_id, assumptions, execute_only)?;
     let mut result: Option<(Receipt, ChessMoveResult)> = None;
     loop {
         let res = session.status(&client)?;
@@ -140,7 +142,7 @@ fn run_bonsai(input: ChessMove, prev_rcpt: Option<Receipt>) -> Result<(Receipt, 
 }
 
 fn run_stark2snark(session_id: String) -> Result<()> {
-    let client = bonsai_sdk::Client::from_env(risc0_zkvm::VERSION)?;
+    let client = Client::from_env(risc0_zkvm::VERSION)?;
 
     let snark_session = client.create_snark(session_id)?;
     eprintln!("Created snark session: {}", snark_session.uuid);
